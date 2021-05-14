@@ -516,8 +516,6 @@ def main():
         model = MyBertForTokenClassification.from_pretrained(args.trained_model_dir, state_dict=previous_state_dict, num_labels=num_labels)
     else:
         model = MyBertForTokenClassification.from_pretrained(args.bert_model, cache_dir=cache_dir, num_labels=num_labels)
-    if args.fp16:
-        model.half()
     model.to(device)
     if args.local_rank != -1:
         try:
@@ -541,18 +539,16 @@ def main():
         ]
     if args.fp16:
         try:
-            from apex.optimizers import FP16_Optimizer
             from apex.optimizers import FusedAdam
+            from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
         optimizer = FusedAdam(optimizer_grouped_parameters,
                               lr=args.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
-        else:
-            optimizer = FP16_Optimizer(optimizer, static_loss_scale=args.loss_scale)
+                              bias_correction=False)
+
+        model, optimizer = amp.initialize(model, optimizer, opt_level="O2")
+
     else:
         optimizer = BertAdam(optimizer_grouped_parameters,
                              lr=args.learning_rate,
@@ -596,7 +592,8 @@ def main():
                     loss = loss / args.gradient_accumulation_steps
 
                 if args.fp16:
-                    optimizer.backward(loss)
+                    with amp.scale_loss(loss, optimizer) as scaled_loss:
+                        scaled_loss.backward()
                 else:
                     loss.backward()
 

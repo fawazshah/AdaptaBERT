@@ -552,7 +552,7 @@ def main():
                     loss = loss / args.gradient_accumulation_steps
                 if args.fp16:
                     with amp.scale_loss(loss, optimizer) as scaled_loss:
-                      scaled_loss.backward()
+                        scaled_loss.backward()
                 else:
                     loss.backward()
                 tr_loss += loss.item()
