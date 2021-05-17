@@ -21,6 +21,7 @@ import argparse
 import logging
 import os
 import pickle
+import pandas as pd
 from io import open
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
@@ -105,57 +106,31 @@ class DataProcessor(object):
     """Processor for the Reddit cross-domain dataset."""
 
     def get_articles_train_examples(self, data_dir):
+        submissions_train_df = pd.read_csv(os.path.join(data_dir, 'submissions_train.tsv'), sep='\t')
+        return self._create_examples(list(submissions_train_df['article body']), 'articles_train')
 
+    def get_articles_test_examples(self, data_dir):
+        submissions_test_df = pd.read_csv(os.path.join(data_dir, 'submissions_test.tsv'), sep='\t')
+        return self._create_examples(list(submissions_test_df['article body']), 'articles_test')
 
-    def get_conll_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "conll_train.pkl")), "conll_train")
+    def get_comments_train_examples(self, data_dir):
+        comments_train_df = pd.read_csv(os.path.join(data_dir, 'comments_train.tsv'), sep='\t')
+        return self._create_examples(list(comments_train_df['comment body']), 'comments_train')
 
-    def get_conll_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "conll_test.pkl")), "conll_dev")
-
-    def get_sep_twitter_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "sep_twitter_train.pkl")), "twitter_train")
-
-    def get_sep_twitter_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "sep_twitter_test.pkl")), "twitter_test")
-
-    def get_labels(self, data_dir):
-        """See base class."""
-        return ['B', 'I', 'O']
+    def get_comments_test_examples(self, data_dir):
+        comments_test_df = pd.read_csv(os.path.join(data_dir, 'comments_test.tsv'), sep='\t')
+        return self._create_examples(list(comments_test_df['comment body']), 'comments_test')
 
     def _create_examples(self, data, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, elem) in enumerate(data):
             guid = "%s-%s" % (set_type, i)
-            text = elem[0]
-            # label = elem[1] # not necessary for cloze-style LM fine-tuning
-            for j in range(mlm_cvg_hack):
+            text = elem
+            # No labels needed since this is for unsupervised MLM domain-tuning.
+            for j in range(mlm_cvg_hack): # ??
                 examples.append(InputExample(guid=guid, text=text))
         return examples
-
-    def _create_examples_without_replacement(self, data, set_type):
-        """Creates examples for the training and dev sets."""
-        examples = []
-        for (i, elem) in enumerate(data):
-            guid = "%s-%s" % (set_type, i)
-            text = elem[0]
-            # label = elem[1] # not necessary for cloze-style LM fine-tuning
-            examples.append(InputExample(guid=guid, text=text))
-        return examples
-
-    def _read_pkl(self, input_file):
-        """Reads a tab separated value file."""
-        data = pickle.load(open(input_file, 'rb'))
-        return data
 
 
 class BERTDataset(Dataset):
@@ -166,26 +141,24 @@ class BERTDataset(Dataset):
         self.sample_counter = 0
 
         processor = DataProcessor()
-        self.examples = processor.get_sep_twitter_train_examples(data_dir) # change here for switching between train/test or whole PPCEME mode
+        self.examples = processor.get_comments_train_examples(data_dir)
 
         # use test examples in unsupervised domain tuning
-        test_examples = processor.get_sep_twitter_test_examples(data_dir)
+        test_examples = processor.get_comments_test_examples(data_dir)
         self.examples.extend(test_examples)
 
-        # hybrid domain tuning
-        orig_domain_examples = random.sample(processor.get_conll_train_examples(data_dir), len(self.examples))
-        # orig_domain_examples = processor.get_conll_train_examples(data_dir)
-        self.examples.extend(orig_domain_examples)
+        # hybrid domain tuning - include equal amount of src domain data for MLM (or all src data if not enough)
+        src_domain_examples = processor.get_articles_train_examples(data_dir)
+        self.examples.extend(src_domain_examples)
 
-        # general_examples = processor.get_twitter_general_examples(data_dir)
-        # self.examples.extend(general_examples)
+        src_domain_examples = processor.get_articles_test_examples(data_dir)
+        self.examples.extend(src_domain_examples)
 
     def __len__(self):
         # last line of doc won't be used, because there's no "nextSentence". Additionally, we start counting at 0.
         return len(self.examples)
 
     def __getitem__(self, item):
-        cur_id = self.sample_counter
         self.sample_counter += 1
 
         # combine to one sample
@@ -217,7 +190,7 @@ class InputExample(object):
             specified for train and dev examples, but not for test examples.
         """
         self.guid = guid
-        self.text = text # list of tokens
+        self.text = text
 
 
 class InputFeatures(object):
@@ -230,7 +203,7 @@ class InputFeatures(object):
         self.lm_label_ids = lm_label_ids
 
 
-def random_word(tokens, tokenizer):
+def mask_random_words(tokens, tokenizer):
     """
     Masking some random tokens for Language Model task with probabilities as in the original BERT paper.
     :param tokens: list of str, tokenized sentence.
@@ -271,14 +244,14 @@ def random_word(tokens, tokenizer):
 
 def convert_example_to_features(example, max_seq_length, tokenizer):
     """
-    Convert a raw sample (pair of sentences as tokenized strings) into a proper training sample with
-    IDs, LM labels, input_mask, CLS and SEP tokens etc.
+    Convert a raw text sample into a proper training sample with IDs, LM labels,
+    input_mask, CLS and SEP tokens etc.
     :param example: InputExample, containing sentence input as strings and is_next label
     :param max_seq_length: int, maximum length of sequence.
     :param tokenizer: Tokenizer
     :return: InputFeatures, containing all inputs and labels of one sample as IDs (as used for model training)
     """
-    tokens = example.text
+    tokens = example.text.split()
 
 #     # Account for [CLS] and [SEP] with "- 2"
 #     if len(tokens) > max_seq_length - 2:
@@ -293,7 +266,7 @@ def convert_example_to_features(example, max_seq_length, tokenizer):
         else:
             bert_tokens.extend(new_tokens)
 
-    masked_tokens, masked_tokens_label = random_word(bert_tokens, tokenizer)
+    masked_tokens, masked_tokens_label = mask_random_words(bert_tokens, tokenizer)
     # concatenate lm labels and account for CLS, SEP, SEP
     lm_label_ids = ([-1] + masked_tokens_label + [-1])
 
