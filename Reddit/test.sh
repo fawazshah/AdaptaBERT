@@ -7,5 +7,5 @@ source activate
 source /vol/cuda/11.1.0-cudnn8.0.4.30/setup.sh
 TERM=vt100 # or TERM=xterm
 
-python3 -W ignore test.py --data_dir="data/" --bert_model="bert-base-cased" --output_dir="error_analysis_output/" --trained_model_dir="trained_model/" --max_seq_length=128 --do_test --eval_batch_size=1 --seed=2019
+python3 -W ignore test.py --data_dir="data/train-test-split/" --bert_model="bert-base-uncased" --output_dir="error_analysis_output/" --trained_model_dir="trained_model/" --max_seq_length=128 --do_test --eval_batch_size=1 --seed=2019
 echo Done!
