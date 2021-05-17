@@ -102,7 +102,10 @@ class MyBertForMaskedLM(BertPreTrainedModel):
 
 
 class DataProcessor(object):
-    """Processor for the MRPC data set (GLUE version)."""
+    """Processor for the Reddit cross-domain dataset."""
+
+    def get_articles_train_examples(self, data_dir):
+
 
     def get_conll_train_examples(self, data_dir):
         """See base class."""
@@ -123,11 +126,6 @@ class DataProcessor(object):
         """See base class."""
         return self._create_examples(
             self._read_pkl(os.path.join(data_dir, "sep_twitter_test.pkl")), "twitter_test")
-
-    def get_twitter_general_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples_without_replacement(
-            self._read_pkl(os.path.join(data_dir, "twitter_general.pkl")), "twitter_general")
 
     def get_labels(self, data_dir):
         """See base class."""
