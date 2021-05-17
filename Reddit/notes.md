@@ -1,5 +1,5 @@
 ## Data
-The raw data is in `resources/` and the processed data is in `data/`. You can also re-process the data using `python process_data.py <each command>`.
+All data is present in `data/`. Train/val/test splits can be regenerated using `python3 train-val-test-split.py all-data/{submissions/comments}_preprocessed.tsv`.
 
 ## Model
 To train the model from scratch (in our case, pretrained BERT without finetuning), run:
