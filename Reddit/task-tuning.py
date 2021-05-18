@@ -470,7 +470,6 @@ def main():
     processor = DataProcessor()
     label_list = processor.get_labels()
     num_labels = len(label_list)
-    label_map = {label : i for i, label in enumerate(label_list)}
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
     train_examples = None
@@ -627,7 +626,7 @@ def main():
         eval_loss = 0
         nb_eval_steps = 0
 
-        all_logits = []
+        all_predictions = []
         all_labels = []
 
         for input_ids, input_mask, segment_ids, labels in tqdm(eval_dataloader, desc="Evaluating"):
@@ -640,18 +639,18 @@ def main():
                 tmp_eval_loss = model(input_ids, segment_ids, input_mask, labels)
                 logits = model(input_ids, segment_ids, input_mask)
 
-            logits = logits.detach().cpu().numpy()
+            predictions = np.argmax(logits.detach().cpu().numpy(), axis=1)
             labels = labels.to('cpu').numpy()
 
-            all_logits.append(logits)
+            all_predictions.append(predictions)
             all_labels.append(labels)
 
             eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
 
         eval_loss = eval_loss / nb_eval_steps
-        eval_accuracy = accuracy_score(all_labels, all_logits)
-        eval_f1 = f1_score(all_labels, all_logits, average='macro')
+        eval_accuracy = accuracy_score(all_labels, all_predictions)
+        eval_f1 = f1_score(all_labels, all_predictions, average='macro')
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
                   'eval_f1': eval_f1}
@@ -683,7 +682,7 @@ def main():
         test_loss = 0
         nb_test_steps = 0
 
-        all_logits = []
+        all_predictions = []
         all_labels = []
 
         for input_ids, input_mask, segment_ids, labels in tqdm(test_dataloader, desc="Testing"):
@@ -696,18 +695,18 @@ def main():
                 tmp_test_loss = model(input_ids, segment_ids, input_mask, labels)
                 logits = model(input_ids, segment_ids, input_mask)
 
-            logits = logits.detach().cpu().numpy()
+            predictions = np.argmax(logits.detach().cpu().numpy(), axis=1)
             labels = labels.to('cpu').numpy()
 
-            all_logits.append(logits)
+            all_predictions.append(predictions)
             all_labels.append(labels)
 
             test_loss += tmp_test_loss.mean().item()
             nb_test_steps += 1
 
         test_loss = test_loss / nb_test_steps
-        test_accuracy = accuracy_score(all_labels, all_logits)
-        test_f1 = f1_score(all_labels, all_logits, average='macro')
+        test_accuracy = accuracy_score(all_labels, all_predictions)
+        test_f1 = f1_score(all_labels, all_predictions, average='macro')
         result = {'test_loss': test_loss,
                   'test_accuracy': test_accuracy,
                   'test_f1': test_f1}
