@@ -3,6 +3,10 @@ import pandas as pd
 submissions_df = pd.read_csv('all-data/submissions_preprocessed.tsv', sep='\t')
 comments_df = pd.read_csv('all-data/comments_preprocessed.tsv', sep='\t')
 
+# Shuffle datasets
+submissions_df = submissions_df.sample(frac=1)
+comments_df = comments_df.sample(frac=1)
+
 TRAIN = 0.8
 TEST = 0.2
 
