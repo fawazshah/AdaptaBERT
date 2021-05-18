@@ -22,11 +22,11 @@ import logging
 import os
 import random
 import pandas as pd
-import pickle
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 import numpy as np
+from sklearn.metrics import accuracy_score, f1_score
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -131,12 +131,11 @@ class InputExample(object):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, label_ids, label_mask):
+    def __init__(self, input_ids, input_mask, segment_ids, label):
         self.input_ids = input_ids
         self.input_mask = input_mask
         self.segment_ids = segment_ids
-        self.label_ids = label_ids
-        self.label_mask = label_mask # necessary since the label mismatch for wordpieces
+        self.label = label
 
 
 class DataProcessor(object):
@@ -178,13 +177,11 @@ class DataProcessor(object):
         return examples
 
 
-def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
-    """Loads a data file into a list of `InputBatch`s."""
-
-    label_map = {label : i for i, label in enumerate(label_list)}
+def convert_examples_to_features(examples, max_seq_length, tokenizer):
+    """Converts a list of examples to a list of InputFeatures."""
 
     features = []
-    for (ex_index, example) in enumerate(examples):
+    for _, example in enumerate(examples):
         tokens = example.text.split()
 
 #         # Account for [CLS] and [SEP] with "- 2"
@@ -243,24 +240,15 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
         segment_ids = [0] * max_seq_length # no use for our problem
 
-        labels = example.label
-        label_ids = [0] * max_seq_length
-        label_mask = [0] * max_seq_length
-
-        for label, target_index in zip(labels, orig_to_tok_map):
-            label_ids[target_index] = label_map[label]
-            label_mask[target_index] = 1
-
         assert len(segment_ids) == max_seq_length
-        assert len(label_ids) == max_seq_length
-        assert len(label_mask) == max_seq_length
+
+        label = example.label
 
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,
                               segment_ids=segment_ids,
-                              label_ids=label_ids,
-                              label_mask=label_mask))
+                              label=label))
     return features
 
 def accuracy(out, label_ids, label_mask):
@@ -554,7 +542,7 @@ def main():
     tr_loss = 0
     if args.do_train:
         train_features = convert_examples_to_features(
-            train_examples, label_list, args.max_seq_length, tokenizer)
+            train_examples, args.max_seq_length, tokenizer)
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
@@ -562,9 +550,8 @@ def main():
         all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in train_features], dtype=torch.long)
-        all_label_mask = torch.tensor([f.label_mask for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+        all_labels = torch.tensor([f.label for f in train_features], dtype=torch.long)
+        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_labels)
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
         else:
@@ -578,8 +565,8 @@ def main():
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, label_ids, label_mask = batch
-                loss = model(input_ids, segment_ids, input_mask, label_ids, label_mask)
+                input_ids, input_mask, segment_ids, labels = batch
+                loss = model(input_ids, segment_ids, input_mask, labels)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
                 if args.gradient_accumulation_steps > 1:
@@ -623,59 +610,51 @@ def main():
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         eval_examples = processor.get_articles_test_examples(args.data_dir)
         eval_features = convert_examples_to_features(
-            eval_examples, label_list, args.max_seq_length, tokenizer)
+            eval_examples, args.max_seq_length, tokenizer)
         logger.info("***** Running evaluation *****")
         logger.info("  Num examples = %d", len(eval_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
         all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in eval_features], dtype=torch.long)
-        all_label_mask = torch.tensor([f.label_mask for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+        all_labels = torch.tensor([f.label for f in eval_features], dtype=torch.long)
+        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_labels)
         # Run prediction for full data
         eval_sampler = SequentialSampler(eval_data)
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         model.eval()
-        eval_loss, eval_accuracy = 0, 0
-        nb_eval_steps, nb_eval_examples = 0, 0
-        eval_TP, eval_FP, eval_FN = 0, 0, 0
+        eval_loss = 0
+        nb_eval_steps = 0
 
-        for input_ids, input_mask, segment_ids, label_ids, label_mask in tqdm(eval_dataloader, desc="Evaluating"):
+        all_logits = []
+        all_labels = []
+
+        for input_ids, input_mask, segment_ids, labels in tqdm(eval_dataloader, desc="Evaluating"):
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
-            label_mask = label_mask.to(device)
+            labels = labels.to(device)
 
             with torch.no_grad():
-                tmp_eval_loss = model(input_ids, segment_ids, input_mask, label_ids, label_mask)
+                tmp_eval_loss = model(input_ids, segment_ids, input_mask, labels)
                 logits = model(input_ids, segment_ids, input_mask)
 
             logits = logits.detach().cpu().numpy()
-            label_ids = label_ids.to('cpu').numpy()
-            label_mask = label_mask.to('cpu').numpy()
+            labels = labels.to('cpu').numpy()
 
-            tmp_eval_correct, tmp_eval_total = accuracy(logits, label_ids, label_mask)
-            tplist = true_and_pred(logits, label_ids, label_mask)
-            for trues, preds in tplist:
-                TP, FP, FN = compute_tfpn(trues, preds, label_map)
-                eval_TP += TP
-                eval_FP += FP
-                eval_FN += FN
+            all_logits.append(logits)
+            all_labels.append(labels)
 
             eval_loss += tmp_eval_loss.mean().item()
-            eval_accuracy += tmp_eval_correct
-
-            nb_eval_examples += tmp_eval_total
             nb_eval_steps += 1
 
         eval_loss = eval_loss / nb_eval_steps
-        eval_accuracy = eval_accuracy / nb_eval_examples # micro average
+        eval_accuracy = accuracy_score(all_labels, all_logits)
+        eval_f1 = f1_score(all_labels, all_logits, average='macro')
         result = {'eval_loss': eval_loss,
                   'eval_accuracy': eval_accuracy,
-                  'eval_f1': compute_f1(eval_TP, eval_FP, eval_FN)}
+                  'eval_f1': eval_f1}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
@@ -687,59 +666,51 @@ def main():
     if args.do_test and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         test_examples = processor.get_comments_test_examples(args.data_dir)
         test_features = convert_examples_to_features(
-            test_examples, label_list, args.max_seq_length, tokenizer)
+            test_examples, args.max_seq_length, tokenizer)
         logger.info("***** Running final test *****")
         logger.info("  Num examples = %d", len(test_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
         all_input_ids = torch.tensor([f.input_ids for f in test_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in test_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in test_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in test_features], dtype=torch.long)
-        all_label_mask = torch.tensor([f.label_mask for f in test_features], dtype=torch.long)
-        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask)
+        all_labels = torch.tensor([f.labels for f in test_features], dtype=torch.long)
+        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_labels)
         # Run prediction for full data
         test_sampler = SequentialSampler(test_data)
         test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
 
         model.eval()
-        test_loss, test_accuracy = 0, 0
-        nb_test_steps, nb_test_examples = 0, 0
-        test_TP, test_FP, test_FN = 0, 0, 0
+        test_loss = 0
+        nb_test_steps = 0
 
-        for input_ids, input_mask, segment_ids, label_ids, label_mask in tqdm(test_dataloader, desc="Testing"):
+        all_logits = []
+        all_labels = []
+
+        for input_ids, input_mask, segment_ids, labels in tqdm(test_dataloader, desc="Testing"):
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
-            label_mask = label_mask.to(device)
+            labels = labels.to(device)
 
             with torch.no_grad():
-                tmp_test_loss = model(input_ids, segment_ids, input_mask, label_ids, label_mask)
+                tmp_test_loss = model(input_ids, segment_ids, input_mask, labels)
                 logits = model(input_ids, segment_ids, input_mask)
 
             logits = logits.detach().cpu().numpy()
-            label_ids = label_ids.to('cpu').numpy()
-            label_mask = label_mask.to('cpu').numpy()
+            labels = labels.to('cpu').numpy()
 
-            tmp_test_correct, tmp_test_total = accuracy(logits, label_ids, label_mask)
-            tplist = true_and_pred(logits, label_ids, label_mask)
-            for trues, preds in tplist:
-                TP, FP, FN = compute_tfpn(trues, preds, label_map)
-                test_TP += TP
-                test_FP += FP
-                test_FN += FN
+            all_logits.append(logits)
+            all_labels.append(labels)
 
             test_loss += tmp_test_loss.mean().item()
-            test_accuracy += tmp_test_correct
-
-            nb_test_examples += tmp_test_total
             nb_test_steps += 1
 
         test_loss = test_loss / nb_test_steps
-        test_accuracy = test_accuracy / nb_test_examples # micro average
+        test_accuracy = accuracy_score(all_labels, all_logits)
+        test_f1 = f1_score(all_labels, all_logits, average='macro')
         result = {'test_loss': test_loss,
                   'test_accuracy': test_accuracy,
-                  'test_f1': compute_f1(test_TP, test_FP, test_FN)}
+                  'test_f1': test_f1}
 
         output_test_file = os.path.join(args.output_dir, "test_results.txt")
         with open(output_test_file, "w") as writer:
