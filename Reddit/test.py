@@ -31,7 +31,7 @@ from tqdm import tqdm
 from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 
-from Reddit.common import CDL
+from common import CDL
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
