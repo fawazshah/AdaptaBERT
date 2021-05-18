@@ -18,96 +18,26 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
-import csv
 import logging
 import os
 import random
-import sys
-import pickle
+
+from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 import numpy as np
+from sklearn.metrics import accuracy_score, f1_score
 import torch
-from torch import nn
-from torch.nn import CrossEntropyLoss
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
+from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
+from tqdm import tqdm
 
-from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
-from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel, BertConfig, WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-class MyBertForTokenClassification(BertPreTrainedModel):
-    """BERT model for token-level classification.
-    This module is composed of the BERT model with a linear layer on top of
-    the full hidden state of the last layer.
-    Params:
-        `config`: a BertConfig class instance with the configuration to build a new model.
-        `num_labels`: the number of classes for the classifier. Default = 2.
-    Inputs:
-        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
-            with the word token indices in the vocabulary(see the tokens preprocessing logic in the scripts
-            `extract_features.py`, `run_classifier.py` and `run_squad.py`)
-        `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
-            types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
-            a `sentence B` token (see BERT paper for more details).
-        `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
-            selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
-            input sequence length in the current batch. It's the mask that we typically use for attention when
-            a batch has varying length sentences.
-        `labels`: labels for the classification output: torch.LongTensor of shape [batch_size, sequence_length]
-            with indices selected in [0, ..., num_labels].
-    Outputs:
-        if `labels` is not `None`:
-            Outputs the CrossEntropy classification loss of the output with the labels.
-        if `labels` is `None`:
-            Outputs the classification logits of shape [batch_size, sequence_length, num_labels].
-    Example usage:
-    ```python
-    # Already been converted into WordPiece token ids
-    input_ids = torch.LongTensor([[31, 51, 99], [15, 5, 0]])
-    input_mask = torch.LongTensor([[1, 1, 1], [1, 1, 0]])
-    token_type_ids = torch.LongTensor([[0, 0, 1], [0, 1, 0]])
-    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
-        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072)
-    num_labels = 2
-    model = BertForTokenClassification(config, num_labels)
-    logits = model(input_ids, token_type_ids, input_mask)
-    ```
-    """
-    def __init__(self, config, num_labels):
-        super(MyBertForTokenClassification, self).__init__(config)
-        self.num_labels = num_labels
-        self.bert = BertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, num_labels)
-        self.apply(self.init_bert_weights)
-
-    def forward(self, input_ids, token_type_ids, attention_mask, labels=None, label_mask=None):
-        sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            active_loss = label_mask.view(-1) == 1
-            active_logits = logits.view(-1, self.num_labels)[active_loss]
-            active_labels = labels.view(-1)[active_loss]
-            loss = loss_fct(active_logits, active_labels)
-            return loss
-        else:
-            return logits
 
 
 class InputExample(object):
@@ -142,57 +72,50 @@ class InputFeatures(object):
 
 
 class DataProcessor(object):
-    """Processor for the MRPC data set (GLUE version)."""
+    """Processor for the Reddit cross-domain dataset."""
 
-    def get_conll_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "conll_train.pkl")), "conll_train")
+    def get_articles_train_examples(self, data_dir):
+        submissions_train_df = pd.read_csv(os.path.join(data_dir, 'submissions_train.tsv'), sep='\t')
+        data = [(row['article body'], row['bias']) for _, row in submissions_train_df.iterrows()]
+        return self._create_examples(data, 'articles_train')
 
-    def get_conll_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "conll_test.pkl")), "conll_dev")
+    def get_articles_test_examples(self, data_dir):
+        submissions_test_df = pd.read_csv(os.path.join(data_dir, 'submissions_test.tsv'), sep='\t')
+        data = [(row['article body'], row['bias']) for _, row in submissions_test_df.iterrows()]
+        return self._create_examples(data, 'articles_test')
 
-    def get_sep_twitter_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "sep_twitter_train.pkl")), "twitter_train")
+    def get_comments_train_examples(self, data_dir):
+        comments_train_df = pd.read_csv(os.path.join(data_dir, 'comments_train.tsv'), sep='\t')
+        data = [(row['comment body'], row['bias']) for _, row in comments_train_df.iterrows()]
+        return self._create_examples(data, 'comments_train')
 
-    def get_sep_twitter_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "sep_twitter_test.pkl")), "twitter_test")
+    def get_comments_test_examples(self, data_dir):
+        comments_test_df = pd.read_csv(os.path.join(data_dir, 'comments_test.tsv'), sep='\t')
+        data = [(row['comment body'], row['bias']) for _, row in comments_test_df.iterrows()]
+        return self._create_examples(data, 'comments_test')
 
-    def get_labels(self, data_dir):
+    def get_labels(self):
         """See base class."""
-        return ['B', 'I', 'O']
+        return [0, 1]
 
     def _create_examples(self, data, set_type):
-        """Creates examples for the training and dev sets."""
+        """Creates examples for the training and test sets."""
         examples = []
         for (i, elem) in enumerate(data):
-            guid = i #"%s-%s" % (set_type, i)
+            guid = "%s-%s" % (set_type, i)
             text = elem[0]
             label = elem[1]
             examples.append(
                 InputExample(guid=guid, text=text, label=label))
         return examples
 
-    def _read_pkl(self, input_file):
-        """Reads a tab separated value file."""
-        data = pickle.load(open(input_file, 'rb'))
-        return data
 
-
-def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
-    """Loads a data file into a list of `InputBatch`s."""
-
-    label_map = {label : i for i, label in enumerate(label_list)}
+def convert_examples_to_features(examples, max_seq_length, tokenizer):
+    """Converts a list of examples to a list of InputFeatures."""
 
     features = []
-    for (ex_index, example) in enumerate(examples):
-        tokens = example.text
+    for _, example in enumerate(examples):
+        tokens = example.text.split()
 
 #         # Account for [CLS] and [SEP] with "- 2"
 #         if len(tokens) > max_seq_length - 2:
@@ -250,105 +173,17 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
         segment_ids = [0] * max_seq_length # no use for our problem
 
-        labels = example.label
-        label_ids = [0] * max_seq_length
-        label_mask = [0] * max_seq_length
-
-        for label, target_index in zip(labels, orig_to_tok_map):
-            label_ids[target_index] = label_map[label]
-            label_mask[target_index] = 1
-
         assert len(segment_ids) == max_seq_length
-        assert len(label_ids) == max_seq_length
-        assert len(label_mask) == max_seq_length
+
+        label = example.label
 
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,
                               segment_ids=segment_ids,
-                              label_ids=label_ids,
-                              label_mask=label_mask,
-                              guid=example.guid))
+                              label=label))
     return features
 
-def accuracy(out, label_ids, label_mask):
-    # axis-0: seqs in batch; axis-1: toks in seq; axis-2: potential labels of tok
-    outputs = np.argmax(out, axis=2)
-    matched = outputs == label_ids
-    num_correct = np.sum(matched * label_mask)
-    num_total = np.sum(label_mask)
-    return num_correct, num_total
-
-def true_and_pred(out, label_ids, label_mask):
-    # axis-0: seqs in batch; axis-1: toks in seq; axis-2: potential labels of tok
-    tplist = []
-    outputs = np.argmax(out, axis=2)
-    for i in range(len(label_ids)):
-        trues = []
-        preds = []
-        for true, pred, mask in zip(label_ids[i], outputs[i], label_mask[i]):
-            if mask:
-                trues.append(true)
-                preds.append(pred)
-        tplist.append((trues, preds))
-    return tplist
-
-def compute_tfpn(_trues, _preds, label_map):
-    trues = _trues + [label_map['O']]
-    preds = _preds + [label_map['O']]
-
-    true_ent_list = []
-    pred_ent_list = []
-
-    ent_start = -1
-    for i, label in enumerate(trues):
-        if ent_start == -1:
-            if label == label_map['B']:
-                ent_start = i
-            elif label == label_map['I']:
-                assert 0 == 1 # should not occur in ground truth
-        else:
-            if label == label_map['B']:
-                true_ent_list.append((ent_start, i))
-                ent_start = i
-            elif label == label_map['O']:
-                true_ent_list.append((ent_start, i))
-                ent_start = -1
-
-    ent_start = -1
-    for i, label in enumerate(preds):
-        if ent_start == -1:
-            if label == label_map['B']:
-                ent_start = i
-            elif label == label_map['I']:
-                ent_start = i # entities in prediction might start with "I"
-        else:
-            if label == label_map['B']:
-                pred_ent_list.append((ent_start, i))
-                ent_start = i
-            elif label == label_map['O']:
-                pred_ent_list.append((ent_start, i))
-                ent_start = -1
-
-    TP, FP, FN, _TP = 0, 0, 0, 0
-    for ent in true_ent_list:
-        if ent in pred_ent_list:
-            TP += 1
-        else:
-            FN += 1
-    for ent in pred_ent_list:
-        if ent in true_ent_list:
-            _TP += 1
-        else:
-            FP += 1
-    assert TP == _TP
-    return TP, FP, FN
-
-def compute_f1(TP, FP, FN):
-    P = TP / (TP + FP)
-    R = TP / (TP + FN)
-    F1 = 2 * P * R / (P + R)
-    return "Precision: " + str(P) + ", Recall: " + str(R) + ", F1: " + str(F1)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -490,13 +325,9 @@ def main():
     processor = DataProcessor()
     label_list = processor.get_labels(args.data_dir)
     num_labels = len(label_list)
-    label_map = {label : i for i, label in enumerate(label_list)}
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
 
-    train_examples = None
-    num_train_optimization_steps = None
-
-    model = MyBertForTokenClassification.from_pretrained(args.trained_model_dir, num_labels=num_labels)
+    model = BertForSequenceClassification.from_pretrained(args.trained_model_dir, num_labels=num_labels)
     model.to(device)
 
     if args.do_test and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
@@ -509,57 +340,44 @@ def main():
         all_input_ids = torch.tensor([f.input_ids for f in test_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in test_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in test_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in test_features], dtype=torch.long)
-        all_label_mask = torch.tensor([f.label_mask for f in test_features], dtype=torch.long)
-        all_guids = torch.tensor([f.guid for f in test_features], dtype=torch.long)
-        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids, all_label_mask, all_guids)
+        all_labels = torch.tensor([f.label for f in test_features], dtype=torch.long)
+        test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_labels)
         # Run prediction for full data
         test_sampler = SequentialSampler(test_data)
         test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
 
         model.eval()
-        test_loss, test_accuracy = 0, 0
-        nb_test_steps, nb_test_examples = 0, 0
-        test_TP, test_FP, test_FN = 0, 0, 0
-        test_output_dict = dict()
+        test_loss = 0
+        nb_test_steps = 0
 
-        for input_ids, input_mask, segment_ids, label_ids, label_mask, guids in tqdm(test_dataloader, desc="Testing"):
+        all_predictions = []
+        all_labels = []
+
+        for input_ids, input_mask, segment_ids, labels in tqdm(test_dataloader, desc="Testing"):
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
-            label_mask = label_mask.to(device)
+            labels = labels.to(device)
 
             with torch.no_grad():
-                tmp_test_loss = model(input_ids, segment_ids, input_mask, label_ids, label_mask)
+                tmp_test_loss = model(input_ids, segment_ids, input_mask, labels)
                 logits = model(input_ids, segment_ids, input_mask)
 
-            logits = logits.detach().cpu().numpy()
-            label_ids = label_ids.to('cpu').numpy()
-            label_mask = label_mask.to('cpu').numpy()
+            predictions = np.argmax(logits.detach().cpu().numpy(), axis=1)
+            labels = labels.to('cpu').numpy()
 
-            tmp_test_correct, tmp_test_total = accuracy(logits, label_ids, label_mask)
-            tplist = true_and_pred(logits, label_ids, label_mask)
-            for trues, preds in tplist:
-                TP, FP, FN = compute_tfpn(trues, preds, label_map)
-                test_TP += TP
-                test_FP += FP
-                test_FN += FN
-
-            for guid, (trues, preds) in zip(guids, tplist):
-                test_output_dict[guid.item()] = (trues, preds, label_map)
+            all_predictions.extend(predictions)
+            all_labels.extend(labels)
 
             test_loss += tmp_test_loss.mean().item()
-            test_accuracy += tmp_test_correct
-
-            nb_test_examples += tmp_test_total
             nb_test_steps += 1
 
         test_loss = test_loss / nb_test_steps
-        test_accuracy = test_accuracy / nb_test_examples # micro average
+        test_accuracy = accuracy_score(all_labels, all_predictions)
+        test_f1 = f1_score(all_labels, all_predictions, average='macro')
         result = {'test_loss': test_loss,
                   'test_accuracy': test_accuracy,
-                  'test_f1': compute_f1(test_TP, test_FP, test_FN)}
+                  'test_f1': test_f1}
 
         output_test_file = os.path.join(args.output_dir, "test_results.txt")
         with open(output_test_file, "w") as writer:
@@ -568,7 +386,6 @@ def main():
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
 
-        pickle.dump(test_output_dict, open(os.path.join(args.output_dir, "test_output_dict.pkl"), "wb"))
 
 if __name__ == "__main__":
     main()
