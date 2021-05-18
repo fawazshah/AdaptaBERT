@@ -15,31 +15,30 @@
 # limitations under the License.
 """Code adapted from the examples in pytorch-pretrained-bert library"""
 
-from Reddit.common import CDL
 from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
-import random
-
-from pytorch_pretrained_bert.modeling import BertForSequenceClassification
-
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-
 import numpy as np
+import os
 import pandas as pd
+import random
 from sklearn.metrics import accuracy_score, f1_score
 import torch
 from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
 from tqdm import tqdm
 
+from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 from pytorch_pretrained_bert.tokenization import BertTokenizer
+
+from Reddit.common import CDL
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
+
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 
 class InputExample(object):

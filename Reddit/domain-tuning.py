@@ -15,36 +15,35 @@
 # limitations under the License.
 """Code adapted from the examples in pytorch-pretrained-bert library"""
 
-from Reddit.common import CDL
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
+from io import open
 import logging
+import numpy as np
 import os
 import pandas as pd
-from io import open
-
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-mlm_cvg_hack = 10
-
-import numpy as np
+import random
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, Dataset, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel, BertOnlyMLMHead, BertConfig, WEIGHTS_NAME, CONFIG_NAME
+from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel, BertOnlyMLMHead, WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
-from torch.utils.data import Dataset
-import random
+from Reddit.common import CDL
+
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+mlm_cvg_hack = 10
 
 
 class MyBertForMaskedLM(BertPreTrainedModel):
