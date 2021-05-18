@@ -6,3 +6,5 @@ def _read_pkl(input_file):
     return data
 
 print(_read_pkl('conll_train.pkl')[0])
+print(_read_pkl('sep_twitter_train.pkl')[0])
+print(_read_pkl('twitter_train.pkl')[0])

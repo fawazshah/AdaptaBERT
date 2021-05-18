@@ -18,11 +18,10 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
-import csv
 import logging
 import os
 import random
-import sys
+import pandas as pd
 import pickle
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
@@ -37,7 +36,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
-from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel, BertConfig, WEIGHTS_NAME, CONFIG_NAME
+from pytorch_pretrained_bert.modeling import BertForSequenceClassification, BertPreTrainedModel, BertModel, BertConfig, WEIGHTS_NAME, CONFIG_NAME
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
@@ -141,34 +140,34 @@ class InputFeatures(object):
 
 
 class DataProcessor(object):
-    """Processor for the MRPC data set (GLUE version)."""
+    """Processor for the Reddit cross-domain dataset."""
 
-    def get_conll_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "conll_train.pkl")), "conll_train")
+    def get_articles_train_examples(self, data_dir):
+        submissions_train_df = pd.read_csv(os.path.join(data_dir, 'submissions_train.tsv'), sep='\t')
+        data = [(row['article body'], row['bias']) for _, row in submissions_train_df.iterrows()]
+        return self._create_examples(data, 'articles_train')
 
-    def get_conll_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "conll_test.pkl")), "conll_dev")
+    def get_articles_test_examples(self, data_dir):
+        submissions_test_df = pd.read_csv(os.path.join(data_dir, 'submissions_test.tsv'), sep='\t')
+        data = [(row['article body'], row['bias']) for _, row in submissions_test_df.iterrows()]
+        return self._create_examples(data, 'articles_test')
 
-    def get_sep_twitter_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "sep_twitter_train.pkl")), "twitter_train")
+    def get_comments_train_examples(self, data_dir):
+        comments_train_df = pd.read_csv(os.path.join(data_dir, 'comments_train.tsv'), sep='\t')
+        data = [(row['comment body'], row['bias']) for _, row in comments_train_df.iterrows()]
+        return self._create_examples(data, 'comments_train')
 
-    def get_sep_twitter_test_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_pkl(os.path.join(data_dir, "sep_twitter_test.pkl")), "twitter_test")
+    def get_comments_test_examples(self, data_dir):
+        comments_test_df = pd.read_csv(os.path.join(data_dir, 'comments_test.tsv'), sep='\t')
+        data = [(row['comment body'], row['bias']) for _, row in comments_test_df.iterrows()]
+        return self._create_examples(data, 'comments_test')
 
-    def get_labels(self, data_dir):
+    def get_labels(self):
         """See base class."""
-        return ['B', 'I', 'O']
+        return [0, 1]
 
     def _create_examples(self, data, set_type):
-        """Creates examples for the training and dev sets."""
+        """Creates examples for the training and test sets."""
         examples = []
         for (i, elem) in enumerate(data):
             guid = "%s-%s" % (set_type, i)
@@ -178,11 +177,6 @@ class DataProcessor(object):
                 InputExample(guid=guid, text=text, label=label))
         return examples
 
-    def _read_pkl(self, input_file):
-        """Reads a tab separated value file."""
-        data = pickle.load(open(input_file, 'rb'))
-        return data
-
 
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
@@ -191,7 +185,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
     features = []
     for (ex_index, example) in enumerate(examples):
-        tokens = example.text
+        tokens = example.text.split()
 
 #         # Account for [CLS] and [SEP] with "- 2"
 #         if len(tokens) > max_seq_length - 2:
@@ -486,7 +480,7 @@ def main():
         os.makedirs(args.output_dir)
 
     processor = DataProcessor()
-    label_list = processor.get_labels(args.data_dir)
+    label_list = processor.get_labels()
     num_labels = len(label_list)
     label_map = {label : i for i, label in enumerate(label_list)}
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
@@ -513,9 +507,9 @@ def main():
             previous_state_dict = OrderedDict()
         distant_state_dict = torch.load(os.path.join(args.trained_model_dir, WEIGHTS_NAME))
         previous_state_dict.update(distant_state_dict) # note that the final layers of previous model and distant model must have different attribute names!
-        model = MyBertForTokenClassification.from_pretrained(args.trained_model_dir, state_dict=previous_state_dict, num_labels=num_labels)
+        model = BertForSequenceClassification.from_pretrained(args.trained_model_dir, state_dict=previous_state_dict, num_labels=num_labels)
     else:
-        model = MyBertForTokenClassification.from_pretrained(args.bert_model, cache_dir=cache_dir, num_labels=num_labels)
+        model = BertForSequenceClassification.from_pretrained(args.bert_model, cache_dir=cache_dir, num_labels=num_labels)
     model.to(device)
     if args.local_rank != -1:
         try:
