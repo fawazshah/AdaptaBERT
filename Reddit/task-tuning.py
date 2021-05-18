@@ -673,7 +673,7 @@ def main():
         all_input_ids = torch.tensor([f.input_ids for f in test_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in test_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in test_features], dtype=torch.long)
-        all_labels = torch.tensor([f.labels for f in test_features], dtype=torch.long)
+        all_labels = torch.tensor([f.label for f in test_features], dtype=torch.long)
         test_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_labels)
         # Run prediction for full data
         test_sampler = SequentialSampler(test_data)
