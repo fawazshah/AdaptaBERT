@@ -642,8 +642,8 @@ def main():
             predictions = np.argmax(logits.detach().cpu().numpy(), axis=1)
             labels = labels.to('cpu').numpy()
 
-            all_predictions.append(predictions)
-            all_labels.append(labels)
+            all_predictions.extend(predictions)
+            all_labels.extend(labels)
 
             eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
@@ -682,7 +682,7 @@ def main():
         test_loss = 0
         nb_test_steps = 0
 
-        all_predictions = []
+        all_logits = []
         all_labels = []
 
         for input_ids, input_mask, segment_ids, labels in tqdm(test_dataloader, desc="Testing"):
@@ -698,15 +698,15 @@ def main():
             predictions = np.argmax(logits.detach().cpu().numpy(), axis=1)
             labels = labels.to('cpu').numpy()
 
-            all_predictions.append(predictions)
-            all_labels.append(labels)
+            all_logits.extend(predictions)
+            all_labels.extend(labels)
 
             test_loss += tmp_test_loss.mean().item()
             nb_test_steps += 1
 
         test_loss = test_loss / nb_test_steps
-        test_accuracy = accuracy_score(all_labels, all_predictions)
-        test_f1 = f1_score(all_labels, all_predictions, average='macro')
+        test_accuracy = accuracy_score(all_labels, all_logits)
+        test_f1 = f1_score(all_labels, all_logits, average='macro')
         result = {'test_loss': test_loss,
                   'test_accuracy': test_accuracy,
                   'test_f1': test_f1}
