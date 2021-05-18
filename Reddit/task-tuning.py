@@ -489,9 +489,9 @@ def main():
     num_train_optimization_steps = None
     if args.do_train:
         if args.supervised_training:
-            train_examples = processor.get_sep_twitter_train_examples(args.data_dir)
+            train_examples = processor.get_comments_train_examples(args.data_dir)
         else:
-            train_examples = processor.get_conll_train_examples(args.data_dir)
+            train_examples = processor.get_articles_train_examples(args.data_dir)
         num_train_optimization_steps = int(
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps) * args.num_train_epochs
         if args.local_rank != -1:
@@ -621,7 +621,7 @@ def main():
             f.write(model_to_save.config.to_json_string())
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        eval_examples = processor.get_conll_dev_examples(args.data_dir)
+        eval_examples = processor.get_articles_test_examples(args.data_dir)
         eval_features = convert_examples_to_features(
             eval_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running evaluation *****")
@@ -685,7 +685,7 @@ def main():
                 writer.write("%s = %s\n" % (key, str(result[key])))
 
     if args.do_test and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        test_examples = processor.get_sep_twitter_test_examples(args.data_dir)
+        test_examples = processor.get_comments_test_examples(args.data_dir)
         test_features = convert_examples_to_features(
             test_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running final test *****")
