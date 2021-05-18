@@ -15,12 +15,12 @@
 # limitations under the License.
 """Code adapted from the examples in pytorch-pretrained-bert library"""
 
+from Reddit.common import CDL
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
 import logging
 import os
-import pickle
 import pandas as pd
 from io import open
 
@@ -105,21 +105,21 @@ class MyBertForMaskedLM(BertPreTrainedModel):
 class DataProcessor(object):
     """Processor for the Reddit cross-domain dataset."""
 
-    def get_articles_train_examples(self, data_dir):
-        submissions_train_df = pd.read_csv(os.path.join(data_dir, 'submissions_train.tsv'), sep='\t')
-        return self._create_examples(list(submissions_train_df['article body']), 'articles_train')
+    def get_src_train_examples(self, data_dir):
+        src_train_df = pd.read_csv(os.path.join(data_dir, CDL['src']['train_data']), sep='\t')
+        return self._create_examples(list(src_train_df[CDL['src']['column']]), CDL['src']['train_data_name'])
 
-    def get_articles_test_examples(self, data_dir):
-        submissions_test_df = pd.read_csv(os.path.join(data_dir, 'submissions_test.tsv'), sep='\t')
-        return self._create_examples(list(submissions_test_df['article body']), 'articles_test')
+    def get_src_test_examples(self, data_dir):
+        src_test_df = pd.read_csv(os.path.join(data_dir, CDL['src']['test_data']), sep='\t')
+        return self._create_examples(list(src_test_df[CDL['src']['column']]), CDL['src']['test_data_name'])
 
-    def get_comments_train_examples(self, data_dir):
-        comments_train_df = pd.read_csv(os.path.join(data_dir, 'comments_train.tsv'), sep='\t')
-        return self._create_examples(list(comments_train_df['comment body']), 'comments_train')
+    def get_trg_train_examples(self, data_dir):
+        trg_train_df = pd.read_csv(os.path.join(data_dir, CDL['trg']['train_data']), sep='\t')
+        return self._create_examples(list(trg_train_df[CDL['trg']['column']]), CDL['trg']['train_data_name'])
 
-    def get_comments_test_examples(self, data_dir):
-        comments_test_df = pd.read_csv(os.path.join(data_dir, 'comments_test.tsv'), sep='\t')
-        return self._create_examples(list(comments_test_df['comment body']), 'comments_test')
+    def get_trg_test_examples(self, data_dir):
+        trg_test_df = pd.read_csv(os.path.join(data_dir, CDL['trg']['test_data']), sep='\t')
+        return self._create_examples(list(trg_test_df[CDL['trg']['column']]), CDL['trg']['test_data_name'])
 
     def _create_examples(self, data, set_type):
         """Creates examples for the training and dev sets."""
@@ -141,17 +141,17 @@ class BERTDataset(Dataset):
         self.sample_counter = 0
 
         processor = DataProcessor()
-        self.examples = processor.get_comments_train_examples(data_dir)
+        self.examples = processor.get_trg_train_examples(data_dir)
 
         # use test examples in unsupervised domain tuning
-        test_examples = processor.get_comments_test_examples(data_dir)
+        test_examples = processor.get_trg_test_examples(data_dir)
         self.examples.extend(test_examples)
 
         # hybrid domain tuning - include equal amount of src domain data for MLM (or all src data if not enough)
-        src_domain_examples = processor.get_articles_train_examples(data_dir)
+        src_domain_examples = processor.get_src_train_examples(data_dir)
         self.examples.extend(src_domain_examples)
 
-        src_domain_examples = processor.get_articles_test_examples(data_dir)
+        src_domain_examples = processor.get_src_test_examples(data_dir)
         self.examples.extend(src_domain_examples)
 
     def __len__(self):

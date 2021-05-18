@@ -15,6 +15,7 @@
 # limitations under the License.
 """Code adapted from the examples in pytorch-pretrained-bert library"""
 
+from Reddit.common import CDL
 from __future__ import absolute_import, division, print_function
 
 import argparse
@@ -27,6 +28,7 @@ from pytorch_pretrained_bert.modeling import BertForSequenceClassification
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 import torch
 from torch.utils.data import (DataLoader, SequentialSampler, TensorDataset)
@@ -74,25 +76,21 @@ class InputFeatures(object):
 class DataProcessor(object):
     """Processor for the Reddit cross-domain dataset."""
 
-    def get_articles_train_examples(self, data_dir):
-        submissions_train_df = pd.read_csv(os.path.join(data_dir, 'submissions_train.tsv'), sep='\t')
-        data = [(row['article body'], row['bias']) for _, row in submissions_train_df.iterrows()]
-        return self._create_examples(data, 'articles_train')
+    def get_src_train_examples(self, data_dir):
+        src_train_df = pd.read_csv(os.path.join(data_dir, CDL['src']['train_data']), sep='\t')
+        return self._create_examples(list(src_train_df[CDL['src']['column']]), CDL['src']['train_data_name'])
 
-    def get_articles_test_examples(self, data_dir):
-        submissions_test_df = pd.read_csv(os.path.join(data_dir, 'submissions_test.tsv'), sep='\t')
-        data = [(row['article body'], row['bias']) for _, row in submissions_test_df.iterrows()]
-        return self._create_examples(data, 'articles_test')
+    def get_src_test_examples(self, data_dir):
+        src_test_df = pd.read_csv(os.path.join(data_dir, CDL['src']['test_data']), sep='\t')
+        return self._create_examples(list(src_test_df[CDL['src']['column']]), CDL['src']['test_data_name'])
 
-    def get_comments_train_examples(self, data_dir):
-        comments_train_df = pd.read_csv(os.path.join(data_dir, 'comments_train.tsv'), sep='\t')
-        data = [(row['comment body'], row['bias']) for _, row in comments_train_df.iterrows()]
-        return self._create_examples(data, 'comments_train')
+    def get_trg_train_examples(self, data_dir):
+        trg_train_df = pd.read_csv(os.path.join(data_dir, CDL['trg']['train_data']), sep='\t')
+        return self._create_examples(list(trg_train_df[CDL['trg']['column']]), CDL['trg']['train_data_name'])
 
-    def get_comments_test_examples(self, data_dir):
-        comments_test_df = pd.read_csv(os.path.join(data_dir, 'comments_test.tsv'), sep='\t')
-        data = [(row['comment body'], row['bias']) for _, row in comments_test_df.iterrows()]
-        return self._create_examples(data, 'comments_test')
+    def get_trg_test_examples(self, data_dir):
+        trg_test_df = pd.read_csv(os.path.join(data_dir, CDL['trg']['test_data']), sep='\t')
+        return self._create_examples(list(trg_test_df[CDL['trg']['column']]), CDL['trg']['test_data_name'])
 
     def get_labels(self):
         """See base class."""
