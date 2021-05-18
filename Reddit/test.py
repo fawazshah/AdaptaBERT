@@ -77,19 +77,23 @@ class DataProcessor(object):
 
     def get_src_train_examples(self, data_dir):
         src_train_df = pd.read_csv(os.path.join(data_dir, CDL['src']['train_data']), sep='\t')
-        return self._create_examples(list(src_train_df[CDL['src']['column']]), CDL['src']['train_data_name'])
+        data = zip(list(src_train_df[CDL['src']['column']]), list(src_train_df['bias']))
+        return self._create_examples(data, CDL['src']['train_data_name'])
 
     def get_src_test_examples(self, data_dir):
         src_test_df = pd.read_csv(os.path.join(data_dir, CDL['src']['test_data']), sep='\t')
-        return self._create_examples(list(src_test_df[CDL['src']['column']]), CDL['src']['test_data_name'])
+        data = zip(list(src_test_df[CDL['src']['column']]), list(src_test_df['bias']))
+        return self._create_examples(data, CDL['src']['test_data_name'])
 
     def get_trg_train_examples(self, data_dir):
         trg_train_df = pd.read_csv(os.path.join(data_dir, CDL['trg']['train_data']), sep='\t')
-        return self._create_examples(list(trg_train_df[CDL['trg']['column']]), CDL['trg']['train_data_name'])
+        data = zip(list(trg_train_df[CDL['trg']['column']]), list(trg_train_df['bias']))
+        return self._create_examples(data, CDL['trg']['train_data_name'])
 
     def get_trg_test_examples(self, data_dir):
         trg_test_df = pd.read_csv(os.path.join(data_dir, CDL['trg']['test_data']), sep='\t')
-        return self._create_examples(list(trg_test_df[CDL['trg']['column']]), CDL['trg']['test_data_name'])
+        data = zip(list(trg_test_df[CDL['trg']['column']]), list(trg_test_df['bias']))
+        return self._create_examples(data, CDL['trg']['test_data_name'])
 
     def get_labels(self):
         """See base class."""
