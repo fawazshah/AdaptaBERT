@@ -334,7 +334,7 @@ def main():
     if args.do_test and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         test_examples = processor.get_trg_test_examples(args.data_dir)
         test_features = convert_examples_to_features(
-            test_examples, label_list, args.max_seq_length, tokenizer)
+            test_examples, args.max_seq_length, tokenizer)
         logger.info("***** Running final test *****")
         logger.info("  Num examples = %d", len(test_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
