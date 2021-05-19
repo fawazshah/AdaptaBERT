@@ -7,5 +7,5 @@ source activate
 source /vol/cuda/11.1.0-cudnn8.0.4.30/setup.sh
 TERM=vt100 # or TERM=xterm
 
-python3 -W ignore domain-tuning.py --data_dir="data/train-test-split/" --bert_model="bert-base-uncased" --output_dir="lm_output/" --max_seq_length=128 --do_train --train_batch_size=64 --learning_rate=5e-5 --num_train_epochs=3 --warmup_proportion=0.1 --seed=2019 --fp16
+python3 -W ignore domain-tuning.py --data_dir="data/train-test-split/" --bert_model="bert-base-uncased" --output_dir="lm_output/" --max_seq_length=128 --do_train --train_batch_size=32 --learning_rate=5e-5 --num_train_epochs=3 --warmup_proportion=0.1 --seed=2019 --fp16
 echo Done!
