@@ -135,9 +135,10 @@ class BERTDataset(Dataset):
         # transform sample to features
         cur_features = convert_example_to_features(cur_example, self.seq_len, self.tokenizer)
 
-        cur_tensors = (torch.tensor(cur_features.input_ids),
-                       torch.tensor(cur_features.attention_mask),
-                       torch.tensor(cur_features.token_type_ids),
+        # Unpack 1 dimension from input ids, attention masks and token type ids
+        cur_tensors = (torch.tensor(cur_features.input_ids)[0],
+                       torch.tensor(cur_features.attention_mask)[0],
+                       torch.tensor(cur_features.token_type_ids)[0],
                        torch.tensor(cur_features.next_sentence_label))
 
         return cur_tensors
