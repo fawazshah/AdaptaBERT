@@ -81,7 +81,7 @@ class DataProcessor(object):
                 j = random.randrange(len(sentences) - 1) # don't select last sentence since there is no next sentence from there
                 text1 = sentences[j]
                 text2 = sentences[j+1]
-                for j in range(nsp_cvg_hack): # ??
+                for k in range(nsp_cvg_hack): # ??
                     examples.append(InputExample(guid=guid, text1=text1, text2=text2))
             # Choose two sentence pairs where the second sentence is instead a random sentence
             for i in range(2):
@@ -89,7 +89,7 @@ class DataProcessor(object):
                 text1 = sentences[j]
                 k = random.randrange(len(sentences))
                 text2 = sentences[k]
-                for j in range(nsp_cvg_hack): # ??
+                for l in range(nsp_cvg_hack): # ??
                     examples.append(InputExample(guid=guid, text1=text1, text2=text2))
             # No labels needed since this is for unsupervised NSP domain-tuning
         return examples
