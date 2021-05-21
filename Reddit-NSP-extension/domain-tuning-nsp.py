@@ -31,10 +31,9 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from pytorch_pretrained_bert.modeling import WEIGHTS_NAME, CONFIG_NAME
-from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
-from transformers import BertForNextSentencePrediction
+from transformers import BertTokenizer, BertForNextSentencePrediction
 
 from common import CDL
 
@@ -82,7 +81,7 @@ class DataProcessor(object):
                 text1 = sentences[j]
                 text2 = sentences[j+1]
                 for k in range(nsp_cvg_hack): # ??
-                    examples.append(InputExample(guid=guid, text1=text1, text2=text2))
+                    examples.append(InputExample(guid=guid, text1=text1, text2=text2, label=1)) # 1 == IsNext
             # Choose two sentence pairs where the second sentence is instead a random sentence
             for i in range(2):
                 j = random.randrange(len(sentences))
@@ -90,7 +89,7 @@ class DataProcessor(object):
                 k = random.randrange(len(sentences))
                 text2 = sentences[k]
                 for l in range(nsp_cvg_hack): # ??
-                    examples.append(InputExample(guid=guid, text1=text1, text2=text2))
+                    examples.append(InputExample(guid=guid, text1=text1, text2=text2, label=0)) # 0 == NotNext
             # No labels needed since this is for unsupervised NSP domain-tuning
         return examples
 
@@ -143,9 +142,9 @@ class BERTDataset(Dataset):
 
 
 class InputExample(object):
-    """A single training/test example for next sentence prediction."""
+    """A single training/test example for NSP."""
 
-    def __init__(self, guid, text1, text2):
+    def __init__(self, guid, text1, text2, label):
         """Constructs a InputExample.
         Args:
             guid: Unique id for the example.
@@ -159,135 +158,41 @@ class InputExample(object):
         self.guid = guid
         self.text1 = text1
         self.text2 = text2
+        self.label = label
 
 
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, input_ids, input_mask, segment_ids, next_sentence_label):
+    def __init__(self, input_ids, attention_mask, token_type_ids, next_sentence_label):
         self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
+        self.attention_mask = attention_mask
+        self.token_type_ids = token_type_ids
         self.next_sentence_label = next_sentence_label
-
-
-def mask_random_words(tokens, tokenizer):
-    """
-    Masking some random tokens for Language Model task with probabilities as in the original BERT paper.
-    :param tokens: list of str, tokenized sentence.
-    :param tokenizer: Tokenizer, object used for tokenization (we need it's vocab here)
-    :return: (list of str, list of int), masked tokens and related labels for LM prediction
-    """
-    output_label = []
-
-    for i, token in enumerate(tokens):
-        prob = random.random()
-        # mask token with 15% probability
-        if prob < 0.15:
-            prob /= 0.15
-
-            # 80% randomly change token to mask token
-            if prob < 0.8:
-                tokens[i] = "[MASK]"
-
-            # 10% randomly change token to random token
-            elif prob < 0.9:
-                tokens[i] = random.choice(list(tokenizer.vocab.items()))[0]
-
-            # -> rest 10% randomly keep current token
-
-            # append current token to output (we will predict these later)
-            try:
-                output_label.append(tokenizer.vocab[token])
-            except KeyError:
-                # For unknown words (should not occur with BPE vocab)
-                output_label.append(tokenizer.vocab["[UNK]"])
-                logger.warning("Cannot find token '{}' in vocab. Using [UNK] insetad".format(token))
-        else:
-            # no masking token (will be ignored by loss function later)
-            output_label.append(-1)
-
-    return tokens, output_label
 
 
 def convert_example_to_features(example, max_seq_length, tokenizer):
     """
-    Convert a raw text sample into a proper training sample with IDs, LM labels,
-    input_mask, CLS and SEP tokens etc.
+    Convert an NSP sample into a proper training sample with IDs, attention masks, CLS and SEP tokens etc.
     :param example: InputExample, containing sentence input as strings and is_next label
     :param max_seq_length: int, maximum length of sequence.
     :param tokenizer: Tokenizer
     :return: InputFeatures, containing all inputs and labels of one sample as IDs (as used for model training)
     """
-    tokens = example.text.split()
 
-#     # Account for [CLS] and [SEP] with "- 2"
-#     if len(tokens) > max_seq_length - 2:
-#         tokens = tokens[:(max_seq_length - 2)]
+    encoding_dict = tokenizer(example.text1,
+                         example.text2,
+                         padding='max_length',
+                         truncation=True,
+                         max_length=max_seq_length,
+                         return_token_type_ids=True,
+                         return_attention_mask=True,
+                         return='pt')
 
-    bert_tokens = []
-    for token in tokens:
-        new_tokens = tokenizer.tokenize(token)
-        if len(bert_tokens) + len(new_tokens) > max_seq_length - 2:
-            # print("You shouldn't see this since the test set is already pre-separated.")
-            break
-        else:
-            bert_tokens.extend(new_tokens)
-
-    masked_tokens, masked_tokens_label = mask_random_words(bert_tokens, tokenizer)
-    # concatenate lm labels and account for CLS, SEP, SEP
-    lm_label_ids = ([-1] + masked_tokens_label + [-1])
-
-    # The convention in BERT is:
-    # (a) For sequence pairs:
-    #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-    #  type_ids: 0   0  0    0    0     0       0 0    1  1  1  1   1 1
-    # (b) For single sequences:
-    #  tokens:   [CLS] the dog is hairy . [SEP]
-    #  type_ids: 0   0   0   0  0     0 0
-    #
-    # Where "type_ids" are used to indicate whether this is the first
-    # sequence or the second sequence. The embedding vectors for `type=0` and
-    # `type=1` were learned during pre-training and are added to the wordpiece
-    # embedding vector (and position vector). This is not *strictly* necessary
-    # since the [SEP] token unambigiously separates the sequences, but it makes
-    # it easier for the model to learn the concept of sequences.
-    #
-    # For classification tasks, the first vector (corresponding to [CLS]) is
-    # used as as the "sentence vector". Note that this only makes sense because
-    # the entire model is fine-tuned.
-    tokens = []
-    segment_ids = []
-    tokens.append("[CLS]")
-    segment_ids.append(0)
-    for token in masked_tokens:
-        tokens.append(token)
-        segment_ids.append(0)
-    tokens.append("[SEP]")
-    segment_ids.append(0)
-
-    input_ids = tokenizer.convert_tokens_to_ids(tokens)
-
-    # The mask has 1 for real tokens and 0 for padding tokens. Only real
-    # tokens are attended to.
-    input_mask = [1] * len(input_ids)
-
-    # Zero-pad up to the sequence length.
-    while len(input_ids) < max_seq_length:
-        input_ids.append(0)
-        input_mask.append(0)
-        segment_ids.append(0)
-        lm_label_ids.append(-1)
-
-    assert len(input_ids) == max_seq_length
-    assert len(input_mask) == max_seq_length
-    assert len(segment_ids) == max_seq_length
-    assert len(lm_label_ids) == max_seq_length
-
-    features = InputFeatures(input_ids=input_ids,
-                             input_mask=input_mask,
-                             segment_ids=segment_ids,
-                             lm_label_ids=lm_label_ids)
+    features = InputFeatures(input_ids=encoding_dict['input_ids'],
+                             attention_mask=encoding_dict['attention_mask'],
+                             token_type_ids=encoding_dict['token_type_ids'],
+                             next_sentence_label=example.label)
     return features
 
 
