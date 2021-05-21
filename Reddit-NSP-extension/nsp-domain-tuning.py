@@ -75,6 +75,8 @@ class DataProcessor(object):
             # Split text into sentences
             split_regex = re.compile(r'[.|!|?|...]')
             sentences = [t.strip() for t in split_regex.split(text) if t.strip() != '']
+            if len(sentences) < 2:
+                continue
             # Choose two sentence-pairs where the second sentence is actually the next sentence
             for i in range(2):
                 j = random.randrange(len(sentences) - 1) # don't select last sentence since there is no next sentence from there
