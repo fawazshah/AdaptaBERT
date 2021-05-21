@@ -1,5 +1,5 @@
 ## Data
-All data is present in `data/`. Train/val/test splits can be regenerated using `python3 train-test-split.py`.
+All data is present in `data/`. Train/test splits can be regenerated using `python3 train-test-split.py`.
 
 ## Model
 To train the model from scratch (in our case, pretrained BERT without finetuning), run:
