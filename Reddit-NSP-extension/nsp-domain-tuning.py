@@ -187,7 +187,7 @@ def convert_example_to_features(example, max_seq_length, tokenizer):
                          max_length=max_seq_length,
                          return_token_type_ids=True,
                          return_attention_mask=True,
-                         return='pt')
+                         return_tensors='pt')
 
     features = InputFeatures(input_ids=encoding_dict['input_ids'],
                              attention_mask=encoding_dict['attention_mask'],
