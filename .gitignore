@@ -3,5 +3,6 @@
 **/slurm*
 
 **/lm_output/
+**/lm_nsp_output/
 **/trained_model/
 **/error_analysis_output/
