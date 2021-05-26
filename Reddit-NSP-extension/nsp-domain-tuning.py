@@ -118,7 +118,7 @@ class BERTDataset(Dataset):
 
         num_trg = len(trg_domain_examples)
         if len(src_domain_examples) > num_trg:
-            self.examples.extend(random.sample(src_domain_examples, k=SRC_PROPORTION*num_trg))
+            self.examples.extend(random.sample(src_domain_examples, k=round(SRC_PROPORTION*num_trg)))
         else:
             self.examples.extend(src_domain_examples)
 
