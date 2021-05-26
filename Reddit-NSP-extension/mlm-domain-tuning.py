@@ -140,18 +140,24 @@ class BERTDataset(Dataset):
         self.sample_counter = 0
 
         processor = DataProcessor()
-        self.examples = processor.get_trg_train_examples(data_dir)
-
+        
+        trg_domain_examples = processor.get_trg_train_examples(data_dir)
         # use test examples in unsupervised domain tuning
-        test_examples = processor.get_trg_test_examples(data_dir)
-        self.examples.extend(test_examples)
+        trg_domain_examples.extend(processor.get_trg_test_examples(data_dir))
 
-        # hybrid domain tuning - include equal amount of src domain data for MLM (or all src data if not enough)
+        self.examples = trg_domain_examples
+
+        # Include equal amount of src domain data for NSP, or all src data if not enough
+
         src_domain_examples = processor.get_src_train_examples(data_dir)
-        self.examples.extend(src_domain_examples)
+        src_domain_examples.extend(processor.get_src_test_examples(data_dir))
 
-        src_domain_examples = processor.get_src_test_examples(data_dir)
-        self.examples.extend(src_domain_examples)
+        num_trg = len(trg_domain_examples)
+        if len(src_domain_examples) > num_trg:
+            self.examples.extend(random.sample(src_domain_examples, k=num_trg))
+        else:
+            self.examples.extend(src_domain_examples)
+
 
     def __len__(self):
         # last line of doc won't be used, because there's no "nextSentence". Additionally, we start counting at 0.
