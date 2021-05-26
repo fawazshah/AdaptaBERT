@@ -18,3 +18,5 @@ CDL = {
     'src': SUBMISSIONS,
     'trg': COMMENTS,
 }
+
+SRC_PROPORTION = 1.0
