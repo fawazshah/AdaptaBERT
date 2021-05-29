@@ -261,7 +261,7 @@ def convert_example_to_features(example, max_seq_length, tokenizer):
     :param tokenizer: Tokenizer
     :return: InputFeatures, containing all inputs and labels of one sample as IDs (as used for model training)
     """
-    tokens = example.text.split()
+    tokens = example.text
 
 #     # Account for [CLS] and [SEP] with "- 2"
 #     if len(tokens) > max_seq_length - 2:
