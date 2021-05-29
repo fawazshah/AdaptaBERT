@@ -125,7 +125,7 @@ class DataProcessor(object):
         examples = []
         for (i, elem) in enumerate(data):
             guid = "%s-%s" % (set_type, i)
-            text = elem
+            text = elem[0]
             # No labels needed since this is for unsupervised MLM domain-tuning.
             for j in range(mlm_cvg_hack): # ??
                 examples.append(InputExample(guid=guid, text=text))
