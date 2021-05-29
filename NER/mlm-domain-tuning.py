@@ -34,7 +34,7 @@ from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel, Ber
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
-from common import CDL, SRC_PROPORTION
+from common import SRC_PROPORTION
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',

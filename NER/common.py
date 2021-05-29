@@ -1,0 +1,1 @@
+SRC_PROPORTION = 1.0
