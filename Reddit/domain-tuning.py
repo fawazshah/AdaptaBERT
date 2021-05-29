@@ -34,7 +34,7 @@ from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel, Ber
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
-from common import CDL
+from common import CDL, SRC_PROPORTION
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -154,7 +154,7 @@ class BERTDataset(Dataset):
 
         num_trg = len(trg_domain_examples)
         if len(src_domain_examples) > num_trg:
-            self.examples.extend(random.sample(src_domain_examples, k=num_trg))
+            self.examples.extend(random.sample(src_domain_examples, k=round(SRC_PROPORTION*num_trg)))
         else:
             self.examples.extend(src_domain_examples)
 
