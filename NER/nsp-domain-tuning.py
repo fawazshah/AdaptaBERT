@@ -76,7 +76,7 @@ class DataProcessor(object):
         examples = []
         for (i, elem) in enumerate(data):
             guid = "%s-%s" % (set_type, i)
-            text = elem
+            text = elem[0]
             # Split text into sentences
             split_regex = re.compile(r'[.|!|?|...]')
             sentences = [t.strip() for t in split_regex.split(text) if t.strip() != '']
