@@ -11,5 +11,5 @@ echo "###########"
 echo "TASK TUNING"
 echo "###########"
 
-python -W ignore task-tuning.py --data_dir="data/" --bert_model="bert-base-cased" --output_dir="trained_model/" --trained_model_dir="lm_output/" --max_seq_length=128 --do_train --train_batch_size=64 --learning_rate=5e-5 --num_train_epochs=3 --warmup_proportion=0.1 --seed=2019 --fp16
+python3 -W ignore task-tuning.py --data_dir="data/" --bert_model="bert-base-cased" --trained_model_dir="lm_nsp_output/" --output_dir="trained_model/" --max_seq_length=128 --do_train --do_eval --do_test --train_batch_size=32 --learning_rate=5e-5 --num_train_epochs=5 --warmup_proportion=0.1 --seed=2019 --fp16
 echo Done!
