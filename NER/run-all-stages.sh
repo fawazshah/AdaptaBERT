@@ -11,7 +11,7 @@ echo "#################"
 echo "MLM DOMAIN TUNING"
 echo "#################"
 
-python3 -W ignore domain-tuning.py --data_dir="data/" --bert_model="bert-base-cased" --output_dir="lm_output/" --max_seq_length=128 --do_train --train_batch_size=32 --learning_rate=5e-5 --num_train_epochs=5 --warmup_proportion=0.1 --seed=2019 --fp16
+python3 -W ignore mlm-domain-tuning.py --data_dir="data/" --bert_model="bert-base-cased" --output_dir="lm_output/" --max_seq_length=128 --do_train --train_batch_size=32 --learning_rate=5e-5 --num_train_epochs=5 --warmup_proportion=0.1 --seed=2019 --fp16
 
 echo "###########"
 echo "TASK TUNING"
