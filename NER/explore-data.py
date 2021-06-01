@@ -25,4 +25,4 @@ for elem in all_data:
     sentences = [t.strip() for t in split_regex.split(text) if t.strip() != '']
     num_sentences.append(len(sentences))
 
-print(f'Avg. sentence length: {sum(num_sentences) / len(num_sentences)}')
+print(f'Avg. Twitter num sentences: {sum(num_sentences) / len(num_sentences)}')
