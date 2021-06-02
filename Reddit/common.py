@@ -19,4 +19,4 @@ CDL = {
     'trg': COMMENTS,
 }
 
-SRC_PROPORTION = 1.0
+SRC_PROPORTION = 0.33
