@@ -40,6 +40,7 @@ num_sentences_submissions_dist.plot(x='index', y='frequency', kind='bar', fontsi
 plt.xlabel('no. sentences in text', fontsize=16)
 plt.ylabel('frequency', fontsize=16)
 plt.xticks(np.arange(0, 151, 25), rotation=0)
+plt.title('articles', fontsize=24)
 plt.show()
 
 # COMMENTS
@@ -76,4 +77,5 @@ num_sentences_comments_dist.plot(x='index', y='frequency', kind='bar', fontsize=
 plt.xlabel('no. sentences in text', fontsize=16)
 plt.ylabel('frequency', fontsize=16)
 plt.xticks(np.arange(0, 26, 5), rotation=0)
+plt.title('comments', fontsize=24)
 plt.show()
