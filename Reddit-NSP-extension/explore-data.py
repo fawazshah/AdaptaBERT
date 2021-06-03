@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import pandas as pd
 import re
@@ -25,11 +26,20 @@ print('Articles num sentences information:')
 
 num_sentences_submissions = pd.Series(num_sentences_submissions)
 print(num_sentences_submissions.describe())
-num_sentences_submissions.sort_values(inplace=True)
-num_sentences_submissions.reset_index(drop=True, inplace=True)
-num_sentences_submissions.plot(fontsize=14, figsize=(10, 7))
-plt.xlabel('article number', fontsize=16)
-plt.ylabel('no. sentences', fontsize=16)
+
+num_sentences_submissions_dist = num_sentences_submissions.value_counts()
+num_sentences_submissions_dist.sort_index(inplace=True)
+num_sentences_submissions_dist = num_sentences_submissions_dist.to_frame('frequency')
+# Remove small outliers for easier visualisation
+num_sentences_submissions_dist.drop(num_sentences_submissions_dist.index[len(num_sentences_submissions_dist.index)-1], inplace=True)
+# Make index 'continuous'
+num_sentences_submissions_dist = num_sentences_submissions_dist.reindex(range(num_sentences_submissions_dist.index[-1]+1)).fillna(0)
+num_sentences_submissions_dist.reset_index(inplace=True)
+
+num_sentences_submissions_dist.plot(x='index', y='frequency', kind='bar', fontsize=14, figsize=(10, 7), legend=None)
+plt.xlabel('no. sentences in text', fontsize=16)
+plt.ylabel('frequency', fontsize=16)
+plt.xticks(np.arange(0, 301, 50), rotation=0)
 plt.show()
 
 # COMMENTS
@@ -52,9 +62,19 @@ print('Comments num sentences information:')
 
 num_sentences_comments = pd.Series(num_sentences_comments)
 print(num_sentences_comments.describe())
-num_sentences_comments.sort_values(inplace=True)
-num_sentences_comments.reset_index(drop=True, inplace=True)
-num_sentences_comments.plot(fontsize=14, figsize=(10, 7))
-plt.xlabel('comment number', fontsize=16)
-plt.ylabel('no. sentences', fontsize=16)
+
+num_sentences_comments_dist = num_sentences_comments.value_counts()
+num_sentences_comments_dist.sort_index(inplace=True)
+num_sentences_comments_dist = num_sentences_comments_dist.to_frame('frequency')
+# Remove small outliers for easier visualisation
+num_sentences_comments_dist.drop(num_sentences_comments_dist.index[len(num_sentences_comments_dist)-1], inplace=True)
+num_sentences_comments_dist.drop(num_sentences_comments_dist.index[len(num_sentences_comments_dist)-1], inplace=True)
+# Make index 'continuous'
+num_sentences_comments_dist = num_sentences_comments_dist.reindex(range(num_sentences_comments_dist.index[-1]+1)).fillna(0)
+num_sentences_comments_dist.reset_index(inplace=True)
+
+num_sentences_comments_dist.plot(x='index', y='frequency', kind='bar', fontsize=14, figsize=(10, 7), legend=None)
+plt.xlabel('no. sentences in text', fontsize=16)
+plt.ylabel('frequency', fontsize=16)
+plt.xticks(np.arange(0, 101, 25), rotation=0)
 plt.show()
